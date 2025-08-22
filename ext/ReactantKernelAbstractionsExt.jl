@@ -1,6 +1,7 @@
 module ReactantKernelAbstractionsExt
 
 using Reactant
+import Reactant: XLA, Sharding
 
 import KernelAbstractions as KA
 
@@ -10,10 +11,17 @@ using Adapt: Adapt
 
 export ReactantBackend
 
-# ToDo: Include XLA client, device and sharding in ReactantBackend struct, to
-# support more complex applications? If so, need to adapt implementation of
-# `KA.get_backend` and `KA.allocate` accordingly.
-struct ReactantBackend <: KA.GPU end
+struct ReactantBackend{
+    C <: XLA.AbstractClient,
+    D <: Union{Nothing,XLA.AbstractDevice},
+    S <: Sharding.AbstractSharding
+} <: KA.GPU
+    client::C
+    device::D
+    sharding::S
+end
+
+ReactantBackend() = ReactantBackend(XLA.default_backend(), nothing, Sharding.NoSharding())
 
 function Base.getproperty(x::ReactantBackend, sym::Symbol)
     if sym === :always_inline
@@ -26,7 +34,7 @@ function Base.getproperty(x::ReactantBackend, sym::Symbol)
 end
 
 function KA.allocate(::ReactantBackend, ::Type{T}, dims::Tuple) where {T}
-    return ConcreteRArray{T}(undef, dims)
+    return ConcreteRArray{T}(undef, dims, client = b.client, device = b.device, sharding = b.sharding)
 end
 
 function KA.zeros(b::ReactantBackend, ::Type{T}, dims::Tuple) where {T}
@@ -40,8 +48,12 @@ function KA.ones(b::ReactantBackend, ::Type{T}, dims::Tuple) where {T}
     return A
 end
 
-KA.get_backend(::Reactant.AnyTracedRArray) = ReactantBackend()
-KA.get_backend(::Reactant.AnyConcreteRArray) = ReactantBackend()
+KA.get_backend(::Reactant.AnyTracedRArray) = ReactantBackend() # # ToDo: What's the correct implementation here?
+
+function KA.get_backend(a::Reactant.AnyConcreteRArray)
+    return ReactantBackend(XLA.client(a), XLA.device(a), a.sharding.sharding)
+end
+
 function KA.synchronize(::ReactantBackend) end
 
 Adapt.adapt_storage(::ReactantBackend, a::Array) = a
