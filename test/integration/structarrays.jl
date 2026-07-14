@@ -91,6 +91,25 @@ end
     @test @jit(sum(sr)) ≈ sum(s2)
 end
 
+@testset "struct-returning broadcast over plain arrays" begin
+    a = rand(10)
+    b = rand(Float32, 10)
+    a_ra = Reactant.to_rarray(a)
+    b_ra = Reactant.to_rarray(b)
+
+    onearg(x) = (; u=x + 1, v=2 * x)
+    res1 = @jit broadcast(onearg, a_ra)
+    @test res1 isa StructVector
+    @test res1.u ≈ a .+ 1
+    @test res1.v ≈ 2 .* a
+
+    twoarg(x, y) = (; s=x + y, p=x * y)
+    res2 = @jit broadcast(twoarg, a_ra, b_ra)
+    @test res2 isa StructVector
+    @test res2.s ≈ a .+ b
+    @test res2.p ≈ a .* b
+end
+
 @testset "structarray with complex numbers" begin
     s = randn(64)
 

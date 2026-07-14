@@ -100,6 +100,19 @@ function Base.similar(
     return alloc_sarr(bc′, ElType)
 end
 
+# Fallback to Reactant's eltype-specific methods: also allocate struct-typed
+# results of broadcasts over plain Reactant arrays as StructArrays, e.g. for
+# `broadcast((x, y) -> (s = x + y, p = x * y), a, b)`:
+function Base.similar(
+    bc::Broadcasted{AbstractReactantArrayStyle{N}}, ::Type{ElType}, dims
+) where {N,ElType}
+    if StructArrays.isnonemptystructtype(ElType) && !(ElType <: Complex)
+        return StructArrays.buildfromschema(T -> similar(bc, T, dims), ElType)
+    else
+        throw(MethodError(similar, (bc, ElType, dims)))
+    end
+end
+
 Base.@propagate_inbounds function StructArrays._getindex(
     x::StructArray{T}, I::Vararg{TracedRNumber{<:Integer}}
 ) where {T}
